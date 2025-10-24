@@ -48,3 +48,5 @@ checkpoints/
 # Ignore generated sample .wav files
 **/*.wav
 multilingual
+
+rtl_dataset
