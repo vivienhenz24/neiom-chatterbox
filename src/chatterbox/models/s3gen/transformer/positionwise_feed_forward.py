@@ -113,3 +113,6 @@ class MoEFFNLayer(torch.nn.Module):
             output[batch_idx] += weights[batch_idx, ith_expert, None] * expert(
                 xs[batch_idx])
         return output.view(B, L, D)
+    
+
+    
