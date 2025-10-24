@@ -17,7 +17,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--dataset-dir",
         type=Path,
-        default=Path("data") / "luxembourgish_corpus" / "luxembourgish_combined",
+        default=Path("data") / "luxembourgish_corpus",
         help="Path to the combined dataset root.",
     )
     parser.add_argument(
@@ -333,8 +333,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(f"  - {message}")
 
     if overall_ok and provenance_ok:
+        protected = {
+            dataset_dir.resolve(),
+            (dataset_dir / "train").resolve(),
+            (dataset_dir / "test").resolve(),
+        }
         for path in work_dir.iterdir():
-            if path.resolve() == dataset_dir.resolve():
+            if path.resolve() in protected:
                 continue
             if path.is_dir():
                 shutil.rmtree(path)

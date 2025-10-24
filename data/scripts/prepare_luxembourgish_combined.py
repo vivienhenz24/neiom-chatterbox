@@ -5,7 +5,7 @@ Download Luxembourgish speech datasets and aggregate them into a single split.
 
 Creates the folder structure:
 
-luxembourgish_combined/
+luxembourgish_corpus/
 └── {train,test}/
     ├── audio/
     └── metadata.csv
@@ -18,6 +18,7 @@ Metadata schema:
 Requirements:
 - requests
 - huggingface_hub
+- numpy
 
 The Hugging Face token is read from the HF_TOKEN environment variable if set.
 """
@@ -39,7 +40,10 @@ from pathlib import Path
 from typing import Iterable, Iterator, List, Sequence
 
 import requests
-from huggingface_hub import hf_hub_download, snapshot_download
+from huggingface_hub import hf_hub_download, snapshot_download, hf_hub_url
+from datasets import load_dataset
+import numpy as np
+import wave
 
 
 HF_RTL_FILE_ID = "1IiFV6TZHH1sOBL409VnmxCXSSyQkue0F"
@@ -147,6 +151,132 @@ def _flatten_wav_directory(root: Path) -> None:
                 continue
 
 
+def _ensure_valid_tar(path: Path, expected_size: int | None = None) -> bool:
+    """Return True if path exists, matches expected size, and is a readable tar archive."""
+    if not path.exists():
+        return False
+    if expected_size and path.stat().st_size != expected_size:
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+        return False
+    if tarfile.is_tarfile(path):
+        try:
+            with tarfile.open(path, "r:gz") as archive:
+                for _ in archive:
+                    pass
+            return True
+        except tarfile.TarError:
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
+            return False
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+    return False
+
+
+def _get_hf_file_size(repo_id: str, filename: str, token: str | None, repo_type: str = "dataset") -> int:
+    url = hf_hub_url(repo_id=repo_id, filename=filename, repo_type=repo_type)
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    with requests.Session() as session:
+        head = session.head(url, headers=headers, allow_redirects=True)
+        head.raise_for_status()
+        return int(head.headers.get("Content-Length", 0))
+
+
+def _download_hf_file(repo_id: str, filename: str, destination: Path, token: str | None, repo_type: str = "dataset") -> None:
+    """Download a large file from Hugging Face with manual range requests."""
+    url = hf_hub_url(repo_id=repo_id, filename=filename, repo_type=repo_type)
+    headers = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = destination.with_suffix(destination.suffix + ".download")
+
+    with requests.Session() as session:
+        head = session.head(url, headers=headers, allow_redirects=True)
+        head.raise_for_status()
+        total = int(head.headers.get("Content-Length", 0))
+
+        if total <= 0:
+            with session.get(url, headers=headers, stream=True, allow_redirects=True) as resp, tmp_path.open("wb") as handle:
+                resp.raise_for_status()
+                for chunk in resp.iter_content(1 << 20):
+                    if chunk:
+                        handle.write(chunk)
+        else:
+            chunk_size = 1 << 26  # 64 MiB
+            downloaded = 0
+            with tmp_path.open("wb") as handle:
+                while downloaded < total:
+                    end = min(downloaded + chunk_size - 1, total - 1)
+                    range_headers = dict(headers)
+                    range_headers["Range"] = f"bytes={downloaded}-{end}"
+                    with session.get(url, headers=range_headers, stream=True, allow_redirects=True) as resp:
+                        resp.raise_for_status()
+                        for chunk in resp.iter_content(1 << 20):
+                            if chunk:
+                                handle.write(chunk)
+                                downloaded += len(chunk)
+
+    tmp_path.replace(destination)
+
+    suffixes = destination.suffixes[-2:]
+    if suffixes == [".tar", ".gz"]:
+        try:
+            with tarfile.open(destination, "r:gz") as archive:
+                for _ in archive:
+                    pass
+        except tarfile.TarError as exc:  # pragma: no cover
+            try:
+                destination.unlink()
+            finally:
+                raise RuntimeError(f"Corrupted download detected for {filename}") from exc
+
+
+def _count_tsv_records(tsv_path: Path) -> int:
+    with tsv_path.open("r", encoding="utf-8") as handle:
+        return sum(1 for line in handle) - 1  # subtract header
+
+
+def _populate_fleurs_from_dataset(target_dir: Path, split: str, token: str | None) -> None:
+    target_dir.mkdir(parents=True, exist_ok=True)
+    ds = load_dataset(
+        "google/fleurs",
+        "lb_lu",
+        split=split,
+        token=token,
+        download_mode="reuse_dataset_if_exists",
+    )
+    for sample in ds:
+        audio_info = sample["audio"]
+        filename = Path(audio_info.get("path", "")).name or f"{sample['id']}.wav"
+        destination = target_dir / filename
+        if destination.exists():
+            continue
+        array = audio_info["array"]
+        if array is None:
+            continue
+        samples = np.clip(array, -1.0, 1.0)
+        int_samples = (samples * 32767.0).astype(np.int16)
+        channels = 1
+        data = int_samples
+        if int_samples.ndim == 2:
+            channels = int_samples.shape[1]
+            data = int_samples.reshape(-1)
+        with wave.open(str(destination), "wb") as handle:
+            handle.setnchannels(channels)
+            handle.setsampwidth(2)
+            handle.setframerate(audio_info["sampling_rate"])
+            handle.writeframes(data.tobytes())
+
+
 def prepare_rtl_dataset(work_dir: Path, fallback_archive: Path | None = None) -> Path:
     """
     Download and extract the RTL benchmark dataset.
@@ -208,24 +338,40 @@ def prepare_fleurs_dataset(work_dir: Path, token: str | None) -> Path:
 
         archive_name = f"{split}.tar.gz"
         archive_path = audio_dir / archive_name
-        if not archive_path.exists():
-            downloaded_audio = Path(
-                hf_hub_download(
-                    repo_id=FLEURS_REPO,
-                    filename=f"{FLEURS_PREFIX}/audio/{archive_name}",
-                    repo_type="dataset",
-                    local_dir=audio_dir,
-                    local_dir_use_symlinks=False,
-                    token=token,
-                )
-            )
-            archive_path.parent.mkdir(parents=True, exist_ok=True)
-            if downloaded_audio.resolve() != archive_path.resolve():
-                shutil.move(str(downloaded_audio), archive_path)
+        expected_size = _get_hf_file_size(
+            repo_id=FLEURS_REPO,
+            filename=f"{FLEURS_PREFIX}/audio/{archive_name}",
+            token=token,
+        )
+        need_download = not _ensure_valid_tar(archive_path, expected_size=expected_size)
+        if need_download:
+            attempts = 0
+            while True:
+                attempts += 1
+                try:
+                    _download_hf_file(
+                        repo_id=FLEURS_REPO,
+                        filename=f"{FLEURS_PREFIX}/audio/{archive_name}",
+                        destination=archive_path,
+                        token=token,
+                    )
+                    break
+                except RuntimeError:
+                    if attempts >= 3:
+                        raise
+                    print(f"[WARN] Retry {attempts} downloading {archive_name}")
 
         extracted = audio_dir / split
+        if need_download and extracted.exists():
+            shutil.rmtree(extracted)
         ensure_untarred(archive_path, extracted)
         _flatten_wav_directory(extracted)
+
+        expected_count = max(_count_tsv_records(tsv_path), 0)
+        current_count = len(list(extracted.glob("*.wav")))
+        if expected_count and current_count < expected_count:
+            dataset_split = "validation" if split == "dev" else split
+            _populate_fleurs_from_dataset(extracted, dataset_split, token)
 
     return base_dir
 
@@ -421,6 +567,8 @@ def aggregate_samples(train_samples: Sequence[Sample], test_samples: Sequence[Sa
     """Write audio files and metadata CSVs to the combined dataset."""
     for split, samples in (("train", train_samples), ("test", test_samples)):
         split_dir = output_dir / split
+        if split_dir.exists():
+            shutil.rmtree(split_dir)
         audio_dir = split_dir / "audio"
         audio_dir.mkdir(parents=True, exist_ok=True)
         metadata_rows: list[tuple[str, str, str]] = []
@@ -469,7 +617,8 @@ def prepare_datasets(work_dir: Path, token: str | None, link_audio: bool, seed: 
     combined_train = rtl_train + fleurs_train + female_train + male_train
     combined_test = rtl_test + fleurs_test + female_test + male_test
 
-    output_dir = work_dir / "luxembourgish_combined"
+    output_dir = work_dir
+    output_dir.mkdir(parents=True, exist_ok=True)
     aggregate_samples(combined_train, combined_test, output_dir, link_audio=link_audio)
 
     print(f"Combined dataset written to {output_dir}")
@@ -532,3 +681,77 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+def _download_hf_file(repo_id: str, filename: str, destination: Path, token: str | None, repo_type: str = "dataset") -> None:
+    """Download a large file from Hugging Face with manual range requests."""
+    url = hf_hub_url(repo_id=repo_id, filename=filename, repo_type=repo_type)
+    headers = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = destination.with_suffix(destination.suffix + ".download")
+
+    with requests.Session() as session:
+        head = session.head(url, headers=headers, allow_redirects=True)
+        head.raise_for_status()
+        total = int(head.headers.get("Content-Length", 0))
+
+        if total <= 0:
+            # Fallback to simple streaming GET without range headers
+            with session.get(url, headers=headers, stream=True, allow_redirects=True) as resp, tmp_path.open("wb") as handle:
+                resp.raise_for_status()
+                for chunk in resp.iter_content(1 << 20):
+                    if chunk:
+                        handle.write(chunk)
+        else:
+            chunk_size = 1 << 26  # 64 MiB
+            downloaded = 0
+            with tmp_path.open("wb") as handle:
+                while downloaded < total:
+                    end = min(downloaded + chunk_size - 1, total - 1)
+                    range_headers = dict(headers)
+                    range_headers["Range"] = f"bytes={downloaded}-{end}"
+                    with session.get(url, headers=range_headers, stream=True, allow_redirects=True) as resp:
+                        resp.raise_for_status()
+                        for chunk in resp.iter_content(1 << 20):
+                            if chunk:
+                                handle.write(chunk)
+                                downloaded += len(chunk)
+
+        tmp_path.replace(destination)
+
+    # Basic integrity check for tarballs
+    suffixes = destination.suffixes[-2:]
+    if suffixes == [".tar", ".gz"]:
+        try:
+            with tarfile.open(destination, "r:gz") as archive:
+                for _ in archive:
+                    pass
+        except tarfile.TarError as exc:  # pragma: no cover
+            try:
+                destination.unlink()
+            finally:
+                raise RuntimeError(f"Corrupted download detected for {filename}") from exc
+
+
+def _count_tsv_records(tsv_path: Path) -> int:
+    with tsv_path.open("r", encoding="utf-8") as handle:
+        return sum(1 for line in handle) - 1  # subtract header
+
+
+def _populate_fleurs_from_dataset(target_dir: Path, split: str, token: str | None) -> None:
+    target_dir.mkdir(parents=True, exist_ok=True)
+    ds = load_dataset(
+        "google/fleurs",
+        "lb_lu",
+        split=split,
+        token=token,
+        download_mode="reuse_dataset_if_exists",
+    )
+    for sample in ds:
+        source_path = Path(sample["path"])
+        if not source_path.exists():
+            continue
+        destination = target_dir / source_path.name
+        if not destination.exists():
+            shutil.copy2(source_path, destination)
