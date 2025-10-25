@@ -407,8 +407,8 @@ if (( KEEP_CONFIG )); then
 else
   BATCH_SIZE=8
   GRAD_ACCUM=4
-  EPOCHS=5
-  LR="4.0e-6"
+  EPOCHS=8
+  LR="2.0e-5"
   WEIGHT_DECAY="0.01"
 
   VALID_ARG="NONE"
@@ -469,7 +469,7 @@ PY
 
   log "Dataset stats → train: ${TRAIN_SAMPLES} samples, valid: ${VALID_SAMPLES} samples, steps/epoch: ${STEPS_PER_EPOCH}, max speech tokens: ${MAX_SPEECH_TOKENS}"
 
-  WARMUP_STEPS=500
+  WARMUP_STEPS=1000
   if [[ "$TOTAL_STEPS" -lt 500 ]]; then
     WARMUP_STEPS=$(( TOTAL_STEPS / 5 ))
     if [[ "$WARMUP_STEPS" -lt 10 ]]; then
@@ -481,6 +481,12 @@ PY
         HALF=1
       fi
       WARMUP_STEPS=$HALF
+    fi
+  fi
+  if [[ "$WARMUP_STEPS" -ge "$TOTAL_STEPS" ]]; then
+    WARMUP_STEPS=$(( TOTAL_STEPS - 1 ))
+    if [[ "$WARMUP_STEPS" -lt 1 ]]; then
+      WARMUP_STEPS=1
     fi
   fi
 
@@ -499,8 +505,8 @@ PY
   if [[ "$CHECKPOINT_EVERY" -lt "$EVAL_EVERY" ]]; then
     CHECKPOINT_EVERY=$EVAL_EVERY
   fi
-  if [[ "$CHECKPOINT_EVERY" -gt 500 ]]; then
-    CHECKPOINT_EVERY=500
+  if [[ "$CHECKPOINT_EVERY" -gt 1000 ]]; then
+    CHECKPOINT_EVERY=1000
   fi
 
   VALID_YAML_VALUE="null"
@@ -515,7 +521,7 @@ dataset:
   audio_root: "${DATASET_BASE_ABS}"
   batch_size: ${BATCH_SIZE}
   eval_batch_size: ${BATCH_SIZE}
-  num_workers: 4
+  num_workers: 8
   max_source_tokens: null
   max_target_tokens: null
 
@@ -533,9 +539,9 @@ optimizer:
   weight_decay: ${WEIGHT_DECAY}
 
 scheduler:
-  name: linear
+  name: cosine
   warmup_steps: ${WARMUP_STEPS}
-  min_lr: 5.0e-7
+  min_lr: 5.0e-6
 
 training:
   epochs: ${EPOCHS}
@@ -552,7 +558,7 @@ logging:
   wandb_project: null
   wandb_run_name: null
   checkpoint_every_n_steps: ${CHECKPOINT_EVERY}
-  max_checkpoints: 8
+  max_checkpoints: 4
 
 seed:
   python: 1337
