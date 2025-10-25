@@ -1,0 +1,48 @@
+dataset:
+  train_tokens_dir: "data/luxembourgish_tokens/train"
+  valid_tokens_dir: "data/luxembourgish_tokens/test"
+  batch_size: 4
+  eval_batch_size: 4
+  num_workers: 4
+  max_source_tokens: null
+  max_target_tokens: null
+
+model:
+  base_checkpoint: "models/multilingual/t3_mtl23ls_v2.safetensors"
+  freeze_encoder: true
+  freeze_decoder: false
+  freeze_modules: []
+
+optimizer:
+  name: adamw
+  lr: 1.0e-5
+  betas: [0.9, 0.999]
+  eps: 1.0e-8
+  weight_decay: 0.01
+
+scheduler:
+  name: linear
+  warmup_steps: 500
+  min_lr: 1.0e-6
+
+training:
+  epochs: 2
+  gradient_accumulation_steps: 4
+  mixed_precision: true
+  max_grad_norm: 1.0
+  eval_every_n_steps: 250
+
+logging:
+  output_dir: "runs/runpod_luxembourgish"
+  log_every_n_steps: 50
+  tensorboard_enabled: true
+  wandb_enabled: false
+  wandb_project: null
+  wandb_run_name: null
+  checkpoint_every_n_steps: 500
+  max_checkpoints: 2
+
+seed:
+  python: 1337
+  numpy: null
+  torch: null
