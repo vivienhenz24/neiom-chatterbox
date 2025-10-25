@@ -383,6 +383,8 @@ class Trainer:
             drop_missing_text=True,
             start_text_token=self.model.hp.start_text_token,
             stop_text_token=self.model.hp.stop_text_token,
+            start_speech_token=self.model.hp.start_speech_token,
+            stop_speech_token=self.model.hp.stop_speech_token,
         )
 
         collate_cfg = T3CollateConfig()

@@ -179,11 +179,6 @@ class T3(nn.Module):
         speech_token_lens: torch.LongTensor,
     ):
         "training method"
-        len_text = text_tokens.size(1)
-        len_speech = speech_tokens.size(1)
-        assert len_text == text_token_lens.max()
-        assert len_speech == speech_token_lens.max()
-
         out = self.forward(
             t3_cond=t3_cond,
             text_tokens=text_tokens,
@@ -196,12 +191,22 @@ class T3(nn.Module):
         # Calc CCE losses
         IGNORE_ID = -100
         device = out.text_logits.device
-        mask_text = torch.arange(len_text, device=device)[None] >= text_token_lens[:, None]  # (B, len_text)
-        mask_speech = torch.arange(len_speech, device=device)[None] >= speech_token_lens[:, None]  # (B, len_speech)
-        masked_text = text_tokens.masked_fill(mask_text, IGNORE_ID)
-        masked_speech = speech_tokens.masked_fill(mask_speech, IGNORE_ID)
-        loss_text = F.cross_entropy(out.text_logits.transpose(1, 2), masked_text, ignore_index=IGNORE_ID)
-        loss_speech = F.cross_entropy(out.speech_logits.transpose(1, 2), masked_speech, ignore_index=IGNORE_ID)
+
+        text_targets = text_tokens[:, 1:]
+        text_logits = out.text_logits[:, :-1, :]
+        effective_text_lens = torch.clamp(text_token_lens - 1, min=0)
+        text_steps = text_targets.size(1)
+        mask_text = torch.arange(text_steps, device=device)[None] >= effective_text_lens[:, None]
+        masked_text = text_targets.masked_fill(mask_text, IGNORE_ID)
+        loss_text = F.cross_entropy(text_logits.transpose(1, 2), masked_text, ignore_index=IGNORE_ID)
+
+        speech_targets = speech_tokens[:, 1:]
+        speech_logits = out.speech_logits[:, :-1, :]
+        effective_speech_lens = torch.clamp(speech_token_lens - 1, min=0)
+        speech_steps = speech_targets.size(1)
+        mask_speech = torch.arange(speech_steps, device=device)[None] >= effective_speech_lens[:, None]
+        masked_speech = speech_targets.masked_fill(mask_speech, IGNORE_ID)
+        loss_speech = F.cross_entropy(speech_logits.transpose(1, 2), masked_speech, ignore_index=IGNORE_ID)
 
         return loss_text, loss_speech
 

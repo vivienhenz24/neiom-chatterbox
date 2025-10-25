@@ -154,6 +154,8 @@ class T3TokenDataset(Dataset):
         allowed_languages: Collection[str] | None = None,
         start_text_token: int | None = None,
         stop_text_token: int | None = None,
+        start_speech_token: int | None = None,
+        stop_speech_token: int | None = None,
     ) -> None:
         super().__init__()
 
@@ -175,6 +177,12 @@ class T3TokenDataset(Dataset):
 
         self._start_text_token = start_text_token if start_text_token is not None else _DEFAULT_T3_HP.start_text_token
         self._stop_text_token = stop_text_token if stop_text_token is not None else _DEFAULT_T3_HP.stop_text_token
+        self._start_speech_token = (
+            start_speech_token if start_speech_token is not None else _DEFAULT_T3_HP.start_speech_token
+        )
+        self._stop_speech_token = (
+            stop_speech_token if stop_speech_token is not None else _DEFAULT_T3_HP.stop_speech_token
+        )
 
         token_files = sorted(self._token_dir.glob("*.pt"))
         if not token_files:
@@ -236,9 +244,23 @@ class T3TokenDataset(Dataset):
         if not isinstance(speech_tokens, torch.Tensor):
             raise TypeError(f"'speech_tokens' in {info.file_path} must be a torch.Tensor, got {type(speech_tokens)!r}")
         speech_tokens = speech_tokens.to("cpu")
+        if speech_tokens.dim() > 1:
+            speech_tokens = speech_tokens.view(-1)
 
         speech_len = payload.get("speech_token_len", info.speech_len)
         speech_len = int(speech_len)
+        if speech_len > speech_tokens.numel():
+            speech_len = int(speech_tokens.numel())
+        speech_tokens = speech_tokens[:speech_len].to(dtype=torch.long)
+
+        tokens_segments = []
+        if speech_tokens.numel() == 0 or speech_tokens[0].item() != self._start_speech_token:
+            tokens_segments.append(torch.tensor([self._start_speech_token], dtype=torch.long))
+        tokens_segments.append(speech_tokens)
+        if speech_tokens.numel() == 0 or speech_tokens[-1].item() != self._stop_speech_token:
+            tokens_segments.append(torch.tensor([self._stop_speech_token], dtype=torch.long))
+        speech_tokens = torch.cat(tokens_segments)
+        speech_len = int(speech_tokens.numel())
 
         text_tokens = payload.get("text_tokens")
         if text_tokens is not None:
@@ -351,6 +373,15 @@ class T3TokenDataset(Dataset):
         speech_len = int(speech_len)
         if speech_len <= 0:
             raise ValueError(f"Invalid 'speech_token_len' ({speech_len}) in {token_file}")
+        if speech_tokens.dim() > 1:
+            speech_tokens = speech_tokens.view(-1)
+        speech_tokens = speech_tokens.to(dtype=torch.long)
+        if speech_len > speech_tokens.numel():
+            speech_len = int(speech_tokens.numel())
+
+        needs_start = speech_len == 0 or speech_tokens[0].item() != self._start_speech_token
+        needs_stop = speech_len == 0 or speech_tokens[min(speech_len - 1, speech_tokens.numel() - 1)].item() != self._stop_speech_token
+        adjusted_speech_len = speech_len + int(needs_start) + int(needs_stop)
 
         text_tokens = payload.get("text_tokens")
         text_len = payload.get("text_token_len")
@@ -372,7 +403,7 @@ class T3TokenDataset(Dataset):
         else:
             raise TypeError(f"'language_id' in {token_file} must be a string or None, got {type(language_id)!r}")
 
-        if max_speech_len is not None and speech_len > max_speech_len:
+        if max_speech_len is not None and adjusted_speech_len > max_speech_len:
             stats.record_length_drop()
             return None
         if max_text_len is not None and text_len is not None and text_len > max_text_len:
@@ -389,12 +420,16 @@ class T3TokenDataset(Dataset):
         if audio_path is not None and not isinstance(audio_path, str):
             raise TypeError(f"'audio_path' in {token_file} must be a string, got {type(audio_path)!r}")
 
-        stats.record_keep(speech_len=speech_len, text_len=text_len if has_text_tokens else None, language_id=language_norm)
+        stats.record_keep(
+            speech_len=adjusted_speech_len,
+            text_len=text_len if has_text_tokens else None,
+            language_id=language_norm,
+        )
 
         sample_index = _SampleIndex(
             file_path=token_file,
             sample_id=token_file.stem,
-            speech_len=speech_len,
+            speech_len=adjusted_speech_len,
             text_len=text_len if has_text_tokens else None,
             language_id=language_norm,
             audio_path=audio_path,

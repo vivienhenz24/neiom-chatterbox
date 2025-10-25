@@ -24,6 +24,7 @@ from tqdm import tqdm
 
 from ..models.s3tokenizer import S3Tokenizer, S3_SR
 from ..models.tokenizers import MTLTokenizer
+from ..models.voice_encoder import VoiceEncoder
 
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,7 @@ class DataPreparationConfig:
     language_id: Optional[str] = None
     max_token_len: Optional[int] = None
     skip_existing: bool = False
+    voice_encoder_checkpoint: Optional[Path] = None
 
 
 @dataclass
@@ -129,6 +131,13 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Do not recompute samples whose token file already exists.",
     )
+    parser.add_argument(
+        "--voice-encoder-checkpoint",
+        type=Path,
+        default=None,
+        help="Optional path to a voice encoder checkpoint (ve.pt). "
+             "When provided, per-sample speaker embeddings are stored in the token files.",
+    )
     return parser.parse_args()
 
 
@@ -187,6 +196,30 @@ def run_preparation(config: DataPreparationConfig) -> DataPreparationResult:
         if not config.text_field:
             raise ValueError("text_field must be provided when generating text tokens.")
 
+    voice_encoder: Optional[VoiceEncoder] = None
+    ve_path: Optional[Path] = None
+    if config.voice_encoder_checkpoint is not None:
+        ve_path = (
+            config.voice_encoder_checkpoint
+            if config.voice_encoder_checkpoint.is_absolute()
+            else dataset_root / config.voice_encoder_checkpoint
+        )
+    else:
+        candidate = Path(__file__).resolve().parents[3] / "models" / "multilingual" / "ve.pt"
+        if candidate.exists():
+            ve_path = candidate
+    if ve_path is not None:
+        if not ve_path.exists():
+            raise FileNotFoundError(f"Voice encoder checkpoint not found: {ve_path}")
+        voice_encoder = VoiceEncoder()
+        state = torch.load(ve_path, map_location="cpu", weights_only=True)
+        voice_encoder.load_state_dict(state)
+        voice_encoder.to(device)
+        voice_encoder.eval()
+        logger.info("Loaded voice encoder from %s", ve_path)
+    else:
+        logger.warning("Voice encoder checkpoint not provided; speaker embeddings will be zero-padded.")
+
     logger.info("Loaded S3Tokenizer on %s", device)
     logger.info("Writing token files to %s", output_dir)
 
@@ -225,7 +258,9 @@ def run_preparation(config: DataPreparationConfig) -> DataPreparationResult:
                     logger.warning("Failed to read existing token file %s: %s", out_path, exc)
                 continue
 
-            audio = load_audio(audio_path).to(device)
+            audio = load_audio(audio_path)
+            audio_np = audio.numpy()
+            audio = audio.to(device)
             speech_tokens, speech_len = tokenize_audio(tokenizer, audio, max_len=config.max_token_len)
             max_speech_len = max(max_speech_len, speech_len)
 
@@ -251,6 +286,17 @@ def run_preparation(config: DataPreparationConfig) -> DataPreparationResult:
                     if language_id:
                         payload["language_id"] = language_id
                     max_text_len = text_len if max_text_len is None else max(max_text_len, text_len)
+
+            if voice_encoder is not None:
+                try:
+                    embedding = voice_encoder.embeds_from_wavs(
+                        [audio_np],
+                        sample_rate=S3_SR,
+                        as_spk=True,
+                    )
+                    payload["speaker_embedding"] = torch.from_numpy(embedding).float()
+                except Exception as exc:  # pylint: disable=broad-except
+                    logger.warning("Failed to compute speaker embedding for %s: %s", audio_rel, exc)
 
             torch.save(payload, out_path)
             processed += 1
@@ -281,6 +327,7 @@ def main() -> None:
         language_id=args.language_id,
         max_token_len=args.max_token_len,
         skip_existing=args.skip_existing,
+        voice_encoder_checkpoint=args.voice_encoder_checkpoint,
     )
     result = run_preparation(config)
 

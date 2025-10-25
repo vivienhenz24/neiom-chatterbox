@@ -9,7 +9,7 @@ dataset:
 
 model:
   base_checkpoint: "models/multilingual/t3_mtl23ls_v2.safetensors"
-  freeze_encoder: true
+  freeze_encoder: false
   freeze_decoder: false
   freeze_modules: []
 
