@@ -240,7 +240,7 @@ def build_scheduler(
             return None
         return torch.optim.lr_scheduler.LinearLR(
             optimizer,
-            start_factor=0.0,
+            start_factor=1e-6,
             end_factor=1.0,
             total_iters=warmup,
         )
@@ -262,7 +262,7 @@ def build_scheduler(
             schedulers.append(
                 torch.optim.lr_scheduler.LinearLR(
                     optimizer,
-                    start_factor=0.0,
+                    start_factor=1e-6,
                     end_factor=1.0,
                     total_iters=warmup,
                 )
