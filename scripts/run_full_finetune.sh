@@ -190,6 +190,13 @@ PY
       fail "Torch still reports no CUDA support after reinstall. Verify the pod image includes NVIDIA drivers."
     fi
   fi
+
+  if [[ "${HF_HUB_ENABLE_HF_TRANSFER:-}" =~ ^([Tt][Rr][Uu][Ee]|1|yes|YES)$ ]]; then
+    if ! "$PYTHON_BIN" -m pip show hf_transfer >/dev/null 2>&1; then
+      log "Installing hf_transfer to satisfy HF_HUB_ENABLE_HF_TRANSFER..."
+      "$PYTHON_BIN" -m pip install hf_transfer
+    fi
+  fi
 fi
 
 if (( RUN_DOWNLOAD_MODEL )); then
