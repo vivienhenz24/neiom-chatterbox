@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 from collections import deque
+from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional, Protocol, Sequence
@@ -12,7 +13,6 @@ from typing import Callable, Optional, Protocol, Sequence
 import torch
 from torch.utils.data import DataLoader
 from torch.nn.utils import clip_grad_norm_
-from torch.cuda.amp import autocast
 
 from .config import T3FineTuningConfig
 from .datasets.collate import T3CollateConfig, collate_t3
@@ -141,7 +141,12 @@ class Trainer:
             for step, batch in enumerate(self.train_loader):
                 batch = self._move_batch_to_device(batch)
 
-                with autocast(device_type=device_type, dtype=amp_dtype, enabled=self.use_amp):
+                if self.use_amp:
+                    autocast_ctx = torch.autocast(device_type=device_type, dtype=amp_dtype)
+                else:
+                    autocast_ctx = nullcontext()
+
+                with autocast_ctx:
                     text_loss, speech_loss = self.model.loss(
                         t3_cond=batch["cond"],
                         text_tokens=batch["text_tokens"],
