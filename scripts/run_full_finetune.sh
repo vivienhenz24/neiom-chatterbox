@@ -321,8 +321,8 @@ if (( KEEP_CONFIG )); then
 else
   BATCH_SIZE=4
   GRAD_ACCUM=4
-  EPOCHS=10
-  LR="7.5e-6"
+  EPOCHS=45
+  LR="4.0e-6"
   WEIGHT_DECAY="0.01"
 
   VALID_ARG="NONE"
