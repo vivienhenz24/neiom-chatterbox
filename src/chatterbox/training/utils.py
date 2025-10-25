@@ -62,14 +62,19 @@ def seed_everything(
         _torch.manual_seed(actual_seed)
         if _torch.cuda.is_available():
             _torch.cuda.manual_seed_all(actual_seed)
-        try:
-            _torch.use_deterministic_algorithms(True, warn_only=True)
-        except (AttributeError, RuntimeError):  # pragma: no cover - depends on torch version
-            LOGGER.debug("Torch.use_deterministic_algorithms not available.")
+        enable_deterministic = os.environ.get("CHATTERBOX_DETERMINISTIC", "").lower() in {"1", "true", "yes", "on"}
+        if enable_deterministic:
+            os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+            try:
+                _torch.use_deterministic_algorithms(True, warn_only=True)
+            except (AttributeError, RuntimeError):  # pragma: no cover - depends on torch version
+                LOGGER.debug("Torch.use_deterministic_algorithms not available.")
+        else:
+            LOGGER.debug("Deterministic CUDA algorithms disabled (set CHATTERBOX_DETERMINISTIC=1 to enable).")
         cudnn = getattr(_torch.backends, "cudnn", None)
         if cudnn is not None:
-            cudnn.benchmark = False
-            cudnn.deterministic = True
+            cudnn.benchmark = not enable_deterministic
+            cudnn.deterministic = enable_deterministic
     elif torch_seed is not None:
         LOGGER.warning("Torch not available; cannot set torch seed.")
 

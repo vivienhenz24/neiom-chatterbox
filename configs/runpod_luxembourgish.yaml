@@ -1,9 +1,9 @@
 dataset:
   train_tokens_dir: "data/luxembourgish_tokens/train"
   valid_tokens_dir: "data/luxembourgish_tokens/test"
-  batch_size: 4
-  eval_batch_size: 4
-  num_workers: 4
+  batch_size: 8
+  eval_batch_size: 8
+  num_workers: 8
   max_source_tokens: null
   max_target_tokens: null
 
@@ -15,18 +15,18 @@ model:
 
 optimizer:
   name: adamw
-  lr: 1.0e-5
+  lr: 2.0e-5
   betas: [0.9, 0.999]
   eps: 1.0e-8
   weight_decay: 0.01
 
 scheduler:
-  name: linear
-  warmup_steps: 500
-  min_lr: 1.0e-6
+  name: cosine
+  warmup_steps: 1000
+  min_lr: 5.0e-6
 
 training:
-  epochs: 2
+  epochs: 8
   gradient_accumulation_steps: 4
   mixed_precision: true
   max_grad_norm: 1.0
@@ -39,8 +39,8 @@ logging:
   wandb_enabled: false
   wandb_project: null
   wandb_run_name: null
-  checkpoint_every_n_steps: 500
-  max_checkpoints: 2
+  checkpoint_every_n_steps: 1000
+  max_checkpoints: 4
 
 seed:
   python: 1337

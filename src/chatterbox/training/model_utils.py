@@ -10,8 +10,14 @@ from typing import Optional, Sequence
 import torch
 from safetensors.torch import load_file as load_safetensors
 from torch import nn
-from torch.cuda.amp import GradScaler
+from torch.cuda.amp import GradScaler as _CudaGradScaler
 from torch.optim import Optimizer
+try:  # PyTorch >= 2.1 exposes the new torch.amp API.
+    from torch.amp import GradScaler as _AmpGradScaler  # type: ignore[attr-defined]
+except ImportError:  # pragma: no cover - older torch versions
+    _AmpGradScaler = None
+
+GradScaler = _AmpGradScaler or _CudaGradScaler
 
 from ..models.s3gen import S3Gen
 from ..models.tokenizers import MTLTokenizer
@@ -309,7 +315,12 @@ def create_grad_scaler(enable_amp: bool) -> Optional[GradScaler]:
     if not torch.cuda.is_available():
         logger.warning("AMP enabled but CUDA not available; returning None for GradScaler.")
         return None
-    return GradScaler()
+    if _AmpGradScaler is not None:
+        try:
+            return _AmpGradScaler(device_type="cuda")
+        except TypeError:  # Older signatures may not support kwargs
+            return _AmpGradScaler("cuda")  # type: ignore[call-arg]
+    return _CudaGradScaler()
 
 
 def load_s3gen(
