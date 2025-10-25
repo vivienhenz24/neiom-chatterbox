@@ -69,6 +69,8 @@ def _prepare_trainer(config: T3FineTuningConfig, device: torch.device, *, resume
             max_text_len=config.dataset.max_source_tokens,
             max_speech_len=config.dataset.max_target_tokens,
             drop_missing_text=True,
+            start_text_token=model.hp.start_text_token,
+            stop_text_token=model.hp.stop_text_token,
         )
         batches_per_epoch = max(1, -(-len(dataset) // config.dataset.batch_size))  # ceil division
         steps_per_epoch = max(1, -(-batches_per_epoch // config.training.gradient_accumulation_steps))

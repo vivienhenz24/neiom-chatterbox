@@ -381,6 +381,8 @@ class Trainer:
             max_text_len=self.config.dataset.max_source_tokens,
             max_speech_len=self.config.dataset.max_target_tokens,
             drop_missing_text=True,
+            start_text_token=self.model.hp.start_text_token,
+            stop_text_token=self.model.hp.stop_text_token,
         )
 
         collate_cfg = T3CollateConfig()

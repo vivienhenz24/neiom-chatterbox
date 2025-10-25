@@ -12,6 +12,11 @@ from typing import Any, Callable, Collection, Mapping, Optional
 import torch
 from torch.utils.data import Dataset
 
+from ...models.t3.modules.t3_config import T3Config
+
+
+_DEFAULT_T3_HP = T3Config.multilingual()
+
 
 @dataclass(frozen=True)
 class T3DatasetStats:
@@ -147,6 +152,8 @@ class T3TokenDataset(Dataset):
         max_text_len: int | None = None,
         drop_missing_text: bool = False,
         allowed_languages: Collection[str] | None = None,
+        start_text_token: int | None = None,
+        stop_text_token: int | None = None,
     ) -> None:
         super().__init__()
 
@@ -165,6 +172,9 @@ class T3TokenDataset(Dataset):
         self._max_text_len = max_text_len
         self._drop_missing_text = drop_missing_text
         self._allowed_languages = {lang.lower() for lang in allowed_languages} if allowed_languages else None
+
+        self._start_text_token = start_text_token if start_text_token is not None else _DEFAULT_T3_HP.start_text_token
+        self._stop_text_token = stop_text_token if stop_text_token is not None else _DEFAULT_T3_HP.stop_text_token
 
         token_files = sorted(self._token_dir.glob("*.pt"))
         if not token_files:
@@ -236,11 +246,32 @@ class T3TokenDataset(Dataset):
                 raise TypeError(f"'text_tokens' in {info.file_path} must be a torch.Tensor, got {type(text_tokens)!r}")
             text_tokens = text_tokens.to("cpu")
 
+            if text_tokens.dim() == 0:
+                text_tokens = text_tokens.unsqueeze(0)
+
         text_len = payload.get("text_token_len", info.text_len)
         if text_tokens is not None and text_len is None:
             # Fallback when length metadata was not persisted.
             text_len = int(text_tokens.numel())
         text_len = int(text_len) if text_len is not None else None
+
+        if text_tokens is not None:
+            if text_tokens.dtype != torch.long:
+                text_tokens = text_tokens.to(dtype=torch.long)
+            if text_tokens.numel() == 0:
+                text_tokens = torch.tensor([self._start_text_token, self._stop_text_token], dtype=torch.long)
+            else:
+                if text_tokens[0].item() != self._start_text_token:
+                    text_tokens = torch.cat(
+                        (torch.tensor([self._start_text_token], dtype=torch.long), text_tokens),
+                        dim=0,
+                    )
+                if text_tokens[-1].item() != self._stop_text_token:
+                    text_tokens = torch.cat(
+                        (text_tokens, torch.tensor([self._stop_text_token], dtype=torch.long)),
+                        dim=0,
+                    )
+            text_len = int(text_tokens.numel())
 
         language_id = payload.get("language_id", info.language_id)
         if isinstance(language_id, str):
