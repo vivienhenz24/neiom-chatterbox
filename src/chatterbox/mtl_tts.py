@@ -11,6 +11,7 @@ from huggingface_hub import snapshot_download
 
 from .models.t3 import T3
 from .models.t3.modules.t3_config import T3Config
+from .models.t3.utils import ensure_text_vocab_capacity
 from .models.s3tokenizer import S3_SR, drop_invalid_tokens
 from .models.s3gen import S3GEN_SR, S3Gen
 from .models.tokenizers import MTLTokenizer
@@ -172,10 +173,20 @@ class ChatterboxMultilingualTTS:
         )
         ve.to(device_obj).eval()
 
-        t3 = T3(T3Config.multilingual())
-        t3_state = load_safetensors(ckpt_dir / "t3_mtl23ls_v2.safetensors")
+        tokenizer_path = ckpt_dir / "grapheme_mtl_merged_expanded_v1.json"
+        if not tokenizer_path.exists():
+            raise FileNotFoundError(f"Tokenizer file not found at {tokenizer_path}")
+        tokenizer = MTLTokenizer(str(tokenizer_path))
+        vocab_size = len(tokenizer.tokenizer.get_vocab())
+
+        t3 = T3(T3Config.multilingual(text_tokens_dict_size=vocab_size))
+        t3_ckpt_path = ckpt_dir / "t3_mtl24ls_v1.safetensors"
+        if not t3_ckpt_path.exists():
+            t3_ckpt_path = ckpt_dir / "t3_mtl23ls_v2.safetensors"
+        t3_state = load_safetensors(t3_ckpt_path)
         if "model" in t3_state.keys():
             t3_state = t3_state["model"][0]
+        t3_state = ensure_text_vocab_capacity(t3_state, vocab_size)
         t3.load_state_dict(t3_state)
         t3.to(device_obj).eval()
 
@@ -184,10 +195,6 @@ class ChatterboxMultilingualTTS:
             torch.load(ckpt_dir / "s3gen.pt", map_location=device_obj, weights_only=True)
         )
         s3gen.to(device_obj).eval()
-
-        tokenizer = MTLTokenizer(
-            str(ckpt_dir / "grapheme_mtl_merged_expanded_v1.json")
-        )
 
         conds = None
         if (builtin_voice := ckpt_dir / "conds.pt").exists():

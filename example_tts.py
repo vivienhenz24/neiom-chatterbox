@@ -39,7 +39,7 @@ if not multilingual_ckpt_dir.exists():
 print(f"Loading multilingual model from {multilingual_ckpt_dir}...", flush=True)
 multilingual_model = ChatterboxMultilingualTTS.from_local(multilingual_ckpt_dir, device=device_str)
 print("Multilingual model ready.", flush=True)
-text = "Bonjour, comment ça va? Ceci est le modèle de synthèse vocale multilingue Chatterbox, il prend en charge 23 langues."
+text = "Bonjour, comment ça va? Ceci est le modèle de synthèse vocale multilingue Chatterbox, il prend en charge 24 langues."
 print("Generating French sample...", flush=True)
 wav = multilingual_model.generate(text, language_id="fr")
 ta.save("test-2.wav", wav, multilingual_model.sr)

@@ -20,6 +20,7 @@ REPO_ID = "ResembleAI/chatterbox"
 DEFAULT_ALLOW_PATTERNS = [
     "ve.pt",
     "t3_mtl23ls_v2.safetensors",
+    "t3_mtl24ls_v1.safetensors",
     "s3gen.pt",
     "grapheme_mtl_merged_expanded_v1.json",
     "conds.pt",

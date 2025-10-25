@@ -56,6 +56,8 @@ ensure_cmd() {
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
+export PYTHONPATH="$REPO_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
+
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 TRAIN_DEVICE="cuda"
 PREP_DEVICE="cpu"
@@ -63,6 +65,7 @@ TOKENS_ROOT="data/luxembourgish_tokens"
 OUTPUT_DIR="runs/runpod_luxembourgish"
 CONFIG_PATH="configs/runpod_luxembourgish.yaml"
 MODEL_DIR="models/multilingual"
+MODEL_T3_FILENAME="t3_mtl24ls_v1.safetensors"
 TRAIN_SPLIT="train"
 VALID_SPLIT="test"
 MAX_TOKEN_LEN=""
@@ -232,6 +235,83 @@ if (( RUN_DOWNLOAD_MODEL )); then
   log "Downloading multilingual base checkpoint into $MODEL_DEST_ABS ..."
   "$PYTHON_BIN" "$REPO_ROOT/download_multilingual_model.py" --dest "$MODEL_DEST_ABS"
 fi
+
+log "Ensuring multilingual assets include Luxembourgish support..."
+"$PYTHON_BIN" - <<PY
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+from safetensors.torch import load_file, save_file
+
+from chatterbox.models.t3.utils import ensure_text_vocab_capacity
+
+model_dir = Path(r"$MODEL_DEST_ABS")
+tokenizer_path = model_dir / "grapheme_mtl_merged_expanded_v1.json"
+target_ckpt_name = "$MODEL_T3_FILENAME"
+base_ckpt_name = "t3_mtl23ls_v2.safetensors"
+
+if not tokenizer_path.exists():
+    print(f"[WARN] Tokenizer JSON not found at {tokenizer_path}. Skipping Luxembourgish token injection.", file=sys.stderr)
+    sys.exit(0)
+
+with tokenizer_path.open("r", encoding="utf-8") as fh:
+    tokenizer_payload = json.load(fh)
+
+added_tokens = tokenizer_payload.setdefault("added_tokens", [])
+vocab = tokenizer_payload.setdefault("model", {}).setdefault("vocab", {})
+
+if "[lb]" not in vocab:
+    next_id = max(vocab.values()) + 1 if vocab else 0
+    vocab["[lb]"] = next_id
+    added_tokens.append(
+        {
+            "id": next_id,
+            "content": "[lb]",
+            "single_word": False,
+            "lstrip": False,
+            "rstrip": False,
+            "normalized": False,
+            "special": False,
+        }
+    )
+    tokenizer_path.write_text(json.dumps(tokenizer_payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"[INFO] Injected [lb] token into tokenizer (id={next_id}).")
+else:
+    print("[INFO] Tokenizer already contains [lb]; no changes required.")
+
+vocab_size = len(vocab)
+
+target_ckpt_path = model_dir / target_ckpt_name
+base_ckpt_path = model_dir / base_ckpt_name
+
+source_path = target_ckpt_path if target_ckpt_path.exists() else base_ckpt_path
+if not source_path.exists():
+    print(f"[WARN] Neither {target_ckpt_path.name} nor {base_ckpt_path.name} found under {model_dir}. Skipping checkpoint expansion.", file=sys.stderr)
+    sys.exit(0)
+
+state = load_file(str(source_path))
+state = ensure_text_vocab_capacity(state, vocab_size)
+
+if not target_ckpt_path.exists():
+    print(f"[INFO] Writing Luxembourgish-ready checkpoint to {target_ckpt_path.name}.")
+else:
+    print(f"[INFO] Updating existing checkpoint {target_ckpt_path.name} with resized vocabulary.")
+
+save_file(state, str(target_ckpt_path))
+
+if source_path != target_ckpt_path and not target_ckpt_path.exists():
+    print(f"[WARN] Failed to create {target_ckpt_path.name}; falling back to base checkpoint.", file=sys.stderr)
+PY
+
+MODEL_T3_PATH="$MODEL_DEST_ABS/$MODEL_T3_FILENAME"
+if [[ ! -f "$MODEL_T3_PATH" ]]; then
+  MODEL_T3_PATH="$MODEL_DEST_ABS/t3_mtl23ls_v2.safetensors"
+fi
+[[ -f "$MODEL_T3_PATH" ]] || fail "Luxembourgish-ready checkpoint not found under $MODEL_DEST_ABS. Run with --skip-model only after assets exist."
+MODEL_T3_PATH="$(resolve_path "$MODEL_T3_PATH")"
 
 DATA_PREP_SCRIPT="$REPO_ROOT/data/scripts/prepare_luxembourgish_combined.py"
 DATA_ROOT="$REPO_ROOT/data/luxembourgish_corpus"
@@ -433,7 +513,7 @@ dataset:
   max_target_tokens: null
 
 model:
-  base_checkpoint: "${MODEL_DEST_ABS}/t3_mtl23ls_v2.safetensors"
+  base_checkpoint: "${MODEL_T3_PATH}"
   freeze_encoder: false
   freeze_decoder: false
   freeze_modules: []

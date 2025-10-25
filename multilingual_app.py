@@ -63,6 +63,10 @@ LANGUAGE_CONFIG = {
         "audio": "https://storage.googleapis.com/chatterbox-demo-samples/mtl_prompts/ko_f.flac",
         "text": "지난달 우리는 유튜브 채널에서 이십억 조회수라는 새로운 이정표에 도달했습니다."
     },
+    "lb": {
+        "audio": "ref_lux.wav",
+        "text": "Moien! Mir sinn elo prett fir Lëtzebuergesch Texter a Stëmmen ze genéieren mat eisem Chatterbox Modell."
+    },
     "ms": {
         "audio": "https://storage.googleapis.com/chatterbox-demo-samples/mtl_prompts/ms_f.flac",
         "text": "Bulan lepas, kami mencapai pencapaian baru dengan dua bilion tontonan di saluran YouTube kami."
@@ -186,7 +190,7 @@ def generate_tts_audio(
 ) -> tuple[int, np.ndarray]:
     """
     Generate high-quality speech audio from text using Chatterbox Multilingual model with optional reference audio styling.
-    Supported languages: English, French, German, Spanish, Italian, Portuguese, and Hindi.
+    Supported languages include English, French, German, Luxembourgish, and many more (see SUPPORTED_LANGUAGES).
     
     This tool synthesizes natural-sounding speech from input text. When a reference audio file 
     is provided, it captures the speaker's voice characteristics and speaking style. The generated audio 
@@ -238,9 +242,9 @@ def generate_tts_audio(
 
 with gr.Blocks() as demo:
     gr.Markdown(
-        """
+        f"""
         # Chatterbox Multilingual Demo
-        Generate high-quality multilingual speech from text with reference audio styling, supporting 23 languages.
+        Generate high-quality multilingual speech from text with reference audio styling, supporting {len(SUPPORTED_LANGUAGES)} languages.
         """
     )
     

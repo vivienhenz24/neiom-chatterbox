@@ -6,7 +6,7 @@
 [
 
 # Key Details
-- Multilingual, zero-shot TTS supporting 23 languages
+- Multilingual, zero-shot TTS supporting 24 languages
 - SoTA zeroshot English TTS
 - 0.5B Llama backbone
 - Unique exaggeration/intensity control
@@ -17,7 +17,7 @@
 - [Outperforms ElevenLabs](https://podonos.com/resembleai/chatterbox)
 
 # Supported Languages 
-Arabic (ar) • Danish (da) • German (de) • Greek (el) • English (en) • Spanish (es) • Finnish (fi) • French (fr) • Hebrew (he) • Hindi (hi) • Italian (it) • Japanese (ja) • Korean (ko) • Malay (ms) • Dutch (nl) • Norwegian (no) • Polish (pl) • Portuguese (pt) • Russian (ru) • Swedish (sv) • Swahili (sw) • Turkish (tr) • Chinese (zh)
+Arabic (ar) • Danish (da) • German (de) • Greek (el) • English (en) • Spanish (es) • Finnish (fi) • French (fr) • Hebrew (he) • Hindi (hi) • Italian (it) • Japanese (ja) • Korean (ko) • Luxembourgish (lb) • Malay (ms) • Dutch (nl) • Norwegian (no) • Polish (pl) • Portuguese (pt) • Russian (ru) • Swedish (sv) • Swahili (sw) • Turkish (tr) • Chinese (zh)
 # Tips
 - **General Use (TTS and Voice Agents):**
   - Ensure that the reference clip matches the specified language tag. Otherwise, language transfer outputs may inherit the accent of the reference clip’s language. To mitigate this, set `cfg_weight` to `0`.
@@ -66,7 +66,7 @@ ta.save("test-english.wav", wav, model.sr)
 # Multilingual examples
 multilingual_model = ChatterboxMultilingualTTS.from_pretrained(device=device)
 
-french_text = "Bonjour, comment ça va? Ceci est le modèle de synthèse vocale multilingue Chatterbox, il prend en charge 23 langues."
+french_text = "Bonjour, comment ça va? Ceci est le modèle de synthèse vocale multilingue Chatterbox, il prend en charge 24 langues."
 wav_french = multilingual_model.generate(spanish_text, language_id="fr")
 ta.save("test-french.wav", wav_french, model.sr)
 

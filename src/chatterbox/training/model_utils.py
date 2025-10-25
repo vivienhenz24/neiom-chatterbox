@@ -14,8 +14,10 @@ from torch.cuda.amp import GradScaler
 from torch.optim import Optimizer
 
 from ..models.s3gen import S3Gen
+from ..models.tokenizers import MTLTokenizer
 from ..models.t3.t3 import T3
 from ..models.t3.modules.t3_config import T3Config
+from ..models.t3.utils import ensure_text_vocab_capacity
 from .config import ModelConfig, OptimizerConfig, SchedulerConfig
 
 logger = logging.getLogger(__name__)
@@ -44,9 +46,11 @@ def load_multilingual_t3(
     dtype:
         Optional dtype cast applied to model parameters and buffers.
     """
-    model = T3(T3Config.multilingual())
     checkpoint_path = _resolve_t3_checkpoint(model_cfg.base_checkpoint)
+    vocab_size = _resolve_tokenizer_vocab_size(checkpoint_path)
+    model = T3(T3Config.multilingual(text_tokens_dict_size=vocab_size))
     state_dict = _load_t3_state_dict(checkpoint_path)
+    state_dict = ensure_text_vocab_capacity(state_dict, vocab_size)
 
     missing, unexpected = model.load_state_dict(state_dict, strict=False)
     if unexpected:
@@ -84,6 +88,18 @@ def _resolve_t3_checkpoint(provided: Optional[Path]) -> Path:
         "No base checkpoint provided and default multilingual checkpoint missing. "
         f"Expected at {default_path}"
     )
+
+
+def _resolve_tokenizer_vocab_size(checkpoint_path: Path) -> int:
+    directory = checkpoint_path if checkpoint_path.is_dir() else checkpoint_path.parent
+    tokenizer_path = directory / "grapheme_mtl_merged_expanded_v1.json"
+    if not tokenizer_path.exists():
+        raise FileNotFoundError(f"Tokenizer JSON not found next to checkpoint at {tokenizer_path}")
+
+    tokenizer = MTLTokenizer(str(tokenizer_path))
+    vocab_size = len(tokenizer.tokenizer.get_vocab())
+    logger.info("Detected multilingual tokenizer with %d tokens.", vocab_size)
+    return vocab_size
 
 
 def _load_t3_state_dict(path: Path) -> dict[str, torch.Tensor]:
