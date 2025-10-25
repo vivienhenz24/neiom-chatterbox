@@ -199,6 +199,28 @@ PY
   fi
 fi
 
+if [[ "$PREP_DEVICE" == cuda* ]]; then
+  if ! "$PYTHON_BIN" - <<'PY'
+import sys
+import torch
+if not torch.cuda.is_available():
+    sys.exit(1)
+major, _ = torch.cuda.get_device_capability(0)
+sys.exit(0 if major <= 9 else 2)
+PY
+  then
+    status=$?
+    if [[ $status -eq 1 ]]; then
+      log "CUDA unavailable; falling back to CPU for data preparation."
+    elif [[ $status -eq 2 ]]; then
+      log "CUDA device capability not supported by this PyTorch build; falling back to CPU for data preparation."
+    else
+      log "Unable to validate CUDA capability; falling back to CPU for data preparation."
+    fi
+    PREP_DEVICE="cpu"
+  fi
+fi
+
 if (( RUN_DOWNLOAD_MODEL )); then
   log "Downloading multilingual base checkpoint into $MODEL_DEST_ABS ..."
   "$PYTHON_BIN" "$REPO_ROOT/download_multilingual_model.py" --dest "$MODEL_DEST_ABS"
@@ -278,7 +300,7 @@ fi
 TRAIN_TOKENS_DIR_ABS="$(resolve_path "$TOKENS_ROOT_ABS/$TRAIN_SPLIT")"
 [[ -d "$TRAIN_TOKENS_DIR_ABS" ]] || fail "Train tokens directory missing: $TRAIN_TOKENS_DIR_ABS"
 
-if [[ -z "$(ls -1 "$TRAIN_TOKENS_DIR_ABS"/*.pt 2>/dev/null)" ]]; then
+if ! find "$TRAIN_TOKENS_DIR_ABS" -maxdepth 1 -name '*.pt' -print -quit >/dev/null; then
   fail "No token files were generated in $TRAIN_TOKENS_DIR_ABS. Check the data preparation logs above for missing audio/text warnings."
 fi
 
@@ -286,7 +308,7 @@ VALID_TOKENS_DIR_ABS=""
 if [[ -n "$VALID_SPLIT_DIR" ]]; then
   VALID_TOKENS_DIR_ABS="$(resolve_path "$TOKENS_ROOT_ABS/$VALID_SPLIT")"
   [[ -d "$VALID_TOKENS_DIR_ABS" ]] || fail "Validation tokens directory missing: $VALID_TOKENS_DIR_ABS"
-  if [[ -z "$(ls -1 "$VALID_TOKENS_DIR_ABS"/*.pt 2>/dev/null)" ]]; then
+  if ! find "$VALID_TOKENS_DIR_ABS" -maxdepth 1 -name '*.pt' -print -quit >/dev/null; then
     fail "No token files were generated in $VALID_TOKENS_DIR_ABS. Check the data preparation logs above for missing audio/text warnings."
   fi
 fi
