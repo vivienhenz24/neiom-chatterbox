@@ -127,6 +127,27 @@ done
 
 ensure_cmd "$PYTHON_BIN"
 
+python_version_check=$("$PYTHON_BIN" - <<'PY'
+import sys
+print(f"{sys.version_info.major}.{sys.version_info.minor}")
+PY
+)
+
+if [[ "$python_version_check" == 3.12* || "$python_version_check" == 3.13* ]]; then
+  if command -v python3.11 >/dev/null 2>&1; then
+    log "Switching to python3.11 to preserve compatibility with dependency pins."
+    PYTHON_BIN="python3.11"
+  elif command -v apt-get >/dev/null 2>&1; then
+    log "Installing python3.11 for compatibility..."
+    DEBIAN_FRONTEND=noninteractive apt-get update -y
+    DEBIAN_FRONTEND=noninteractive apt-get install -y python3.11 python3.11-venv
+    PYTHON_BIN="python3.11"
+  else
+    fail "Python ${python_version_check} detected but python3.11 unavailable. Install Python 3.11 or pass --python PATH."
+  fi
+  ensure_cmd "$PYTHON_BIN"
+fi
+
 resolve_path() {
   "$PYTHON_BIN" -c 'import pathlib, sys; print(pathlib.Path(sys.argv[1]).expanduser().resolve())' "$1"
 }
