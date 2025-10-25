@@ -29,7 +29,7 @@ def load_finetuned_model(device: str, checkpoint: Path) -> ChatterboxMultilingua
 def synthesize(
     model: ChatterboxMultilingualTTS,
     output_dir: Path,
-    reference_wav: Path,
+    reference_wav: Path | None,
     lines: dict[str, str],
     cfg_weight: float,
     exaggeration: float,
@@ -41,7 +41,13 @@ def synthesize(
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    model.prepare_conditionals(reference_wav, exaggeration=exaggeration)
+    if reference_wav is not None:
+        model.prepare_conditionals(reference_wav, exaggeration=exaggeration)
+    elif model.conds is None:
+        raise RuntimeError(
+            "No reference audio provided and model has no cached conditionals. "
+            "Either supply --reference or ensure models/multilingual/conds.pt is present."
+        )
 
     for name, text in lines.items():
         wav = model.generate(
@@ -72,8 +78,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--reference",
         type=Path,
-        required=True,
-        help="Path to a Luxembourgish reference WAV used for conditioning.",
+        default=None,
+        help="Optional Luxembourgish reference WAV for conditioning. "
+             "If omitted, the built-in voice embedding from models/multilingual/conds.pt is used.",
     )
     parser.add_argument(
         "--output-dir",

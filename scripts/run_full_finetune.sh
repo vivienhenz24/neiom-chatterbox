@@ -19,6 +19,7 @@ Options:
   --valid-split NAME       Dataset split used for validation (default: test; pass "none" to disable)
   --target-steps N         Target total optimizer steps (epochs auto-adjusted to reach N)
   --max-token-len N        Optional speech token truncation length during preparation
+  --skip-existing          Reuse previously generated token files when present
   --resume PATH            Resume training from checkpoint PATH
   --skip-install           Skip dependency installation
   --skip-model             Skip multilingual model download
@@ -72,7 +73,7 @@ RUN_DOWNLOAD_DATA=1
 RUN_PREPARE=1
 RUN_TRAIN=1
 KEEP_CONFIG=0
-SKIP_EXISTING=1
+SKIP_EXISTING=0
 EVAL_ONLY=0
 NO_VALIDATION=0
 FORCE_AMP=0
@@ -102,6 +103,8 @@ while [[ $# -gt 0 ]]; do
       MAX_TOKEN_LEN="$2"; shift 2 ;;
     --resume)
       RESUME_PATH="$2"; shift 2 ;;
+    --skip-existing)
+      SKIP_EXISTING=1; shift ;;
     --skip-install)
       INSTALL_DEPS=0; shift ;;
     --skip-model)
@@ -462,7 +465,7 @@ logging:
   wandb_project: null
   wandb_run_name: null
   checkpoint_every_n_steps: ${CHECKPOINT_EVERY}
-  max_checkpoints: 3
+  max_checkpoints: 8
 
 seed:
   python: 1337
