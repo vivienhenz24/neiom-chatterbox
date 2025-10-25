@@ -253,6 +253,7 @@ def _populate_fleurs_from_dataset(target_dir: Path, split: str, token: str | Non
         split=split,
         token=token,
         download_mode="reuse_dataset_if_exists",
+        trust_remote_code=True,
     )
     for sample in ds:
         audio_info = sample["audio"]
@@ -747,6 +748,7 @@ def _populate_fleurs_from_dataset(target_dir: Path, split: str, token: str | Non
         split=split,
         token=token,
         download_mode="reuse_dataset_if_exists",
+        trust_remote_code=True,
     )
     for sample in ds:
         source_path = Path(sample["path"])
