@@ -19,7 +19,7 @@ class T3Cond:
     clap_emb: Optional[Tensor] = None
     cond_prompt_speech_tokens: Optional[Tensor] = None
     cond_prompt_speech_emb: Optional[Tensor] = None
-    emotion_adv: Optional[Tensor] = 0.5
+    emotion_adv: Optional[Tensor] = None
 
     def to(self, *, device=None, dtype=None):
         "Cast to a device and dtype. Dtype casting is ignored for long/int tensors."

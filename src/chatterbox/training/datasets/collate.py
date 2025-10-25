@@ -84,6 +84,7 @@ def collate_t3(
     language_ids: list[Optional[str]] = []
     metadata_list: list[Optional[Mapping[str, Any]]] = []
     speaker_embs: list[torch.Tensor] = []
+    emotion_adv_values: list[torch.Tensor] = []
 
     for idx, sample in enumerate(batch):
         sample_ids.append(sample.get("id"))
@@ -122,6 +123,9 @@ def collate_t3(
         speaker_tensor = _resolve_speaker_embedding(sample, cfg)
         speaker_embs.append(speaker_tensor)
 
+        emotion_value = _resolve_emotion_adv(sample)
+        emotion_adv_values.append(emotion_value)
+
     if missing_text_indices:
         raise ValueError(
             "One or more samples are missing text tokens. Either regenerate the dataset "
@@ -149,7 +153,10 @@ def collate_t3(
         speech_mask = _lengths_to_mask(speech_lengths, speech_tokens.size(1))
         text_mask = _lengths_to_mask(text_lengths, text_tokens.size(1))
 
-    cond = T3Cond(speaker_emb=torch.stack(speaker_embs, dim=0))
+    cond = T3Cond(
+        speaker_emb=torch.stack(speaker_embs, dim=0),
+        emotion_adv=torch.stack(emotion_adv_values, dim=0),
+    )
 
     return {
         "ids": sample_ids,
@@ -199,6 +206,31 @@ def _resolve_speaker_embedding(sample: Mapping[str, Any], config: T3CollateConfi
     )
     out[: tensor.numel()] = tensor
     return out
+
+
+def _resolve_emotion_adv(sample: Mapping[str, Any]) -> torch.Tensor:
+    metadata = sample.get("metadata")
+    value = None
+    if isinstance(metadata, Mapping):
+        value = metadata.get("emotion_adv") or metadata.get("emotion")
+
+    if value is None:
+        value = sample.get("emotion_adv")
+
+    if torch.is_tensor(value):
+        tensor = value.detach().to(dtype=torch.float32, device="cpu")
+        if tensor.ndim == 0:
+            tensor = tensor.view(1)
+        elif tensor.ndim > 1:
+            tensor = tensor.view(-1)
+        return tensor
+
+    try:
+        numeric = float(value) if value is not None else 0.5
+    except (TypeError, ValueError):
+        numeric = 0.5
+
+    return torch.tensor([numeric], dtype=torch.float32)
 
 
 def _default_speaker_embedding_getter(sample: Mapping[str, Any]) -> Optional[torch.Tensor]:
