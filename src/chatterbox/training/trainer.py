@@ -185,7 +185,11 @@ class Trainer:
                     self.optimizer.zero_grad(set_to_none=True)
 
                     if self.scheduler is not None:
-                        self.scheduler.step(self.global_step)
+                        try:
+                            self.scheduler.step()
+                        except TypeError:
+                            # Some schedulers still expect an explicit step index argument.
+                            self.scheduler.step(self.global_step)
 
                     self.global_step += 1
                     running_loss += avg_total
