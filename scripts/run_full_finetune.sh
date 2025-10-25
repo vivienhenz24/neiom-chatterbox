@@ -133,7 +133,7 @@ resolve_path() {
 
 if [[ ( "$RUN_DOWNLOAD_MODEL" -eq 1 || "$RUN_DOWNLOAD_DATA" -eq 1 ) && -z "${HF_TOKEN:-}" ]]; then
   fail "HF_TOKEN is not set. Export your Hugging Face token before running."
-}
+fi
 
 TOKENS_ROOT_ABS="$(resolve_path "$TOKENS_ROOT")"
 OUTPUT_DIR_ABS="$(resolve_path "$OUTPUT_DIR")"
