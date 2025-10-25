@@ -57,9 +57,9 @@ cd "$REPO_ROOT"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 TRAIN_DEVICE="cuda"
 PREP_DEVICE="cpu"
-TOKENS_ROOT="data/luxembourgish_tokens"
-OUTPUT_DIR="runs/runpod_luxembourgish"
-CONFIG_PATH="configs/runpod_luxembourgish.yaml"
+TOKENS_ROOT="data/luxembourgish_male_tokens"
+OUTPUT_DIR="runs/runpod_luxembourgish_male"
+CONFIG_PATH="configs/runpod_luxembourgish_male.yaml"
 MODEL_DIR="models/multilingual"
 TRAIN_SPLIT="train"
 VALID_SPLIT="test"
@@ -226,29 +226,21 @@ if (( RUN_DOWNLOAD_MODEL )); then
   "$PYTHON_BIN" "$REPO_ROOT/download_multilingual_model.py" --dest "$MODEL_DEST_ABS"
 fi
 
-DATA_BUILD_SCRIPT="$REPO_ROOT/data/scripts/build_and_validate_luxembourgish.sh"
+DATA_PREP_SCRIPT="$REPO_ROOT/data/scripts/prepare_luxembourgish_male_only.py"
+DATA_ROOT="$REPO_ROOT/data/luxembourgish_male_only"
+
 if (( RUN_DOWNLOAD_DATA )); then
-  [[ -x "$DATA_BUILD_SCRIPT" ]] || fail "Dataset build script missing at $DATA_BUILD_SCRIPT"
-  log "Downloading and validating Luxembourgish corpus..."
-  HF_TOKEN="${HF_TOKEN:-}" PYTHON_BIN="$PYTHON_BIN" bash "$DATA_BUILD_SCRIPT"
+  [[ -f "$DATA_PREP_SCRIPT" ]] || fail "Male-only dataset script missing at $DATA_PREP_SCRIPT"
+  log "Preparing Luxembourgish male-only corpus..."
+  "$PYTHON_BIN" "$DATA_PREP_SCRIPT" --work-dir "$DATA_ROOT"
 fi
 
-DATA_ROOT="$REPO_ROOT/data/luxembourgish_corpus"
-COMBINED_ROOT="$DATA_ROOT/luxembourgish_combined"
-DATASET_BASE="$COMBINED_ROOT"
-if [[ ! -d "$COMBINED_ROOT" ]]; then
-  DATASET_BASE="$DATA_ROOT"
+if [[ ! -d "$DATA_ROOT" ]]; then
+  fail "Male-only dataset not found under $DATA_ROOT. Check the preparation step above for errors."
 fi
 
-if [[ ! -d "$DATASET_BASE" ]]; then
-  fail "Combined Luxembourgish dataset not found under $DATA_ROOT. Check the download step above for errors."
-fi
-
-if [[ "$DATASET_BASE" == "$DATA_ROOT" ]]; then
-  log "Using dataset root $DATA_ROOT (no 'luxembourgish_combined' subdirectory present)."
-else
-  log "Using dataset root $COMBINED_ROOT."
-fi
+DATASET_BASE="$DATA_ROOT"
+log "Using male-only dataset root $DATASET_BASE."
 
 DATASET_BASE_ABS="$(resolve_path "$DATASET_BASE")"
 
@@ -319,9 +311,9 @@ if (( KEEP_CONFIG )); then
   [[ -f "$CONFIG_PATH_ABS" ]] || fail "--keep-config set but config file not found at $CONFIG_PATH_ABS"
   log "Keeping existing training config at $CONFIG_PATH_ABS"
 else
-  BATCH_SIZE=4
+  BATCH_SIZE=8
   GRAD_ACCUM=4
-  EPOCHS=45
+  EPOCHS=5
   LR="4.0e-6"
   WEIGHT_DECAY="0.01"
 
