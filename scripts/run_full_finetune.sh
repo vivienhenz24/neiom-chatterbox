@@ -250,6 +250,8 @@ else
   log "Using dataset root $COMBINED_ROOT."
 fi
 
+DATASET_BASE_ABS="$(resolve_path "$DATASET_BASE")"
+
 TRAIN_SPLIT_DIR="$DATASET_BASE/$TRAIN_SPLIT"
 VALID_SPLIT_DIR=""
 if [[ "$VALID_SPLIT" != "none" ]]; then
@@ -402,13 +404,14 @@ PY
 
   VALID_YAML_VALUE="null"
   if [[ -n "$VALID_TOKENS_DIR_ABS" ]]; then
-    VALID_YAML_VALUE="\"$VALID_TOKENS_DIR_ABS\""
-  fi
+  VALID_YAML_VALUE="\"$VALID_TOKENS_DIR_ABS\""
+fi
 
   cat >"$CONFIG_PATH_ABS" <<EOF
 dataset:
   train_tokens_dir: "${TRAIN_TOKENS_DIR_ABS}"
   valid_tokens_dir: ${VALID_YAML_VALUE}
+  audio_root: "${DATASET_BASE_ABS}"
   batch_size: ${BATCH_SIZE}
   eval_batch_size: ${BATCH_SIZE}
   num_workers: 4

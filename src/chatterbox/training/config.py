@@ -23,6 +23,7 @@ except ImportError:  # pragma: no cover - optional dependency
 class DatasetConfig:
     train_tokens_dir: Path
     valid_tokens_dir: Optional[Path] = None
+    audio_root: Optional[Path] = None
     batch_size: int = 16
     eval_batch_size: Optional[int] = None
     num_workers: int = 4
@@ -34,6 +35,8 @@ class DatasetConfig:
             raise FileNotFoundError(f"Train token directory not found: {self.train_tokens_dir}")
         if self.valid_tokens_dir is not None and not self.valid_tokens_dir.exists():
             raise FileNotFoundError(f"Validation token directory not found: {self.valid_tokens_dir}")
+        if self.audio_root is not None and not self.audio_root.exists():
+            raise FileNotFoundError(f"Audio root directory not found: {self.audio_root}")
 
 
 @dataclass
@@ -196,7 +199,7 @@ def apply_overrides(
 
 def _dataset_from_dict(payload: Mapping[str, Any]) -> DatasetConfig:
     data = dict(payload)
-    for key in ("train_tokens_dir", "valid_tokens_dir"):
+    for key in ("train_tokens_dir", "valid_tokens_dir", "audio_root"):
         if key in data and data[key] is not None:
             data[key] = Path(data[key])
     return DatasetConfig(**data)
