@@ -59,9 +59,9 @@ cd "$REPO_ROOT"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 TRAIN_DEVICE="cuda"
 PREP_DEVICE="cpu"
-TOKENS_ROOT="data/luxembourgish_male_tokens"
-OUTPUT_DIR="runs/runpod_luxembourgish_male"
-CONFIG_PATH="configs/runpod_luxembourgish_male.yaml"
+TOKENS_ROOT="data/luxembourgish_tokens"
+OUTPUT_DIR="runs/runpod_luxembourgish"
+CONFIG_PATH="configs/runpod_luxembourgish.yaml"
 MODEL_DIR="models/multilingual"
 TRAIN_SPLIT="train"
 VALID_SPLIT="test"
@@ -233,21 +233,21 @@ if (( RUN_DOWNLOAD_MODEL )); then
   "$PYTHON_BIN" "$REPO_ROOT/download_multilingual_model.py" --dest "$MODEL_DEST_ABS"
 fi
 
-DATA_PREP_SCRIPT="$REPO_ROOT/data/scripts/prepare_luxembourgish_male_only.py"
-DATA_ROOT="$REPO_ROOT/data/luxembourgish_male_only"
+DATA_PREP_SCRIPT="$REPO_ROOT/data/scripts/prepare_luxembourgish_combined.py"
+DATA_ROOT="$REPO_ROOT/data/luxembourgish_corpus"
 
 if (( RUN_DOWNLOAD_DATA )); then
-  [[ -f "$DATA_PREP_SCRIPT" ]] || fail "Male-only dataset script missing at $DATA_PREP_SCRIPT"
-  log "Preparing Luxembourgish male-only corpus..."
+  [[ -f "$DATA_PREP_SCRIPT" ]] || fail "Combined dataset script missing at $DATA_PREP_SCRIPT"
+  log "Preparing Luxembourgish combined corpus..."
   "$PYTHON_BIN" "$DATA_PREP_SCRIPT" --work-dir "$DATA_ROOT"
 fi
 
 if [[ ! -d "$DATA_ROOT" ]]; then
-  fail "Male-only dataset not found under $DATA_ROOT. Check the preparation step above for errors."
+  fail "Combined dataset not found under $DATA_ROOT. Check the preparation step above for errors."
 fi
 
 DATASET_BASE="$DATA_ROOT"
-log "Using male-only dataset root $DATASET_BASE."
+log "Using combined dataset root $DATASET_BASE."
 
 DATASET_BASE_ABS="$(resolve_path "$DATASET_BASE")"
 

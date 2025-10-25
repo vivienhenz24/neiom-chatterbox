@@ -72,8 +72,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--checkpoint",
         type=Path,
-        default=Path("runs/runpod_luxembourgish/checkpoints/step_00048000.pt"),
-        help="Path to fine-tuned T3 checkpoint to load (defaults to step_00048000.pt).",
+        default=Path("/Users/vivienhenz/neiom-chatterbox/runs/runpod_luxembourgish_male/checkpoints/step_00005750.pt"),
+        help="Path to fine-tuned T3 checkpoint to load.",
     )
     parser.add_argument(
         "--reference",
