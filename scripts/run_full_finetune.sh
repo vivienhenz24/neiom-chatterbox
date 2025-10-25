@@ -321,8 +321,8 @@ if (( KEEP_CONFIG )); then
 else
   BATCH_SIZE=4
   GRAD_ACCUM=4
-  EPOCHS=2
-  LR="1.0e-5"
+  EPOCHS=10
+  LR="7.5e-6"
   WEIGHT_DECAY="0.01"
 
   VALID_ARG="NONE"
@@ -434,7 +434,7 @@ optimizer:
 scheduler:
   name: linear
   warmup_steps: ${WARMUP_STEPS}
-  min_lr: 1.0e-6
+  min_lr: 5.0e-7
 
 training:
   epochs: ${EPOCHS}
