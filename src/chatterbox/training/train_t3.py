@@ -57,10 +57,15 @@ def _prepare_trainer(config: T3FineTuningConfig, device: torch.device, *, resume
 
     total_steps = None
     if config.training.epochs and config.dataset.train_tokens_dir.exists():
-        audio_root = config.dataset.audio_root or config.dataset.train_tokens_dir.parent
+        audio_root = config.dataset.audio_root
+        if audio_root is not None:
+            candidate = (audio_root / config.dataset.train_tokens_dir.name).resolve()
+            train_dataset_root = candidate if candidate.exists() else audio_root
+        else:
+            train_dataset_root = config.dataset.train_tokens_dir.parent
         dataset = T3TokenDataset(
             config.dataset.train_tokens_dir,
-            dataset_root=audio_root,
+            dataset_root=train_dataset_root,
             max_text_len=config.dataset.max_source_tokens,
             max_speech_len=config.dataset.max_target_tokens,
             drop_missing_text=True,

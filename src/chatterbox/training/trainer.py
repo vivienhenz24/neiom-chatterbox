@@ -364,10 +364,15 @@ class Trainer:
         if not tokens_dir.exists():
             raise FileNotFoundError(f"Token directory not found: {tokens_dir}")
 
-        audio_root = self.config.dataset.audio_root or tokens_dir.parent
+        audio_root_base = self.config.dataset.audio_root
+        if audio_root_base is not None:
+            candidate = (audio_root_base / tokens_dir.name).resolve()
+            dataset_root = candidate if candidate.exists() else audio_root_base
+        else:
+            dataset_root = tokens_dir.parent
         dataset = T3TokenDataset(
             tokens_dir,
-            dataset_root=audio_root,
+            dataset_root=dataset_root,
             max_text_len=self.config.dataset.max_source_tokens,
             max_speech_len=self.config.dataset.max_target_tokens,
             drop_missing_text=True,
