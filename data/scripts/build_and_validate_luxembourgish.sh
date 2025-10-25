@@ -28,8 +28,13 @@ if [ -d "${WORK_DIR}/luxembourgish_combined" ]; then
   rm -rf "${WORK_DIR}/luxembourgish_combined"
 fi
 
+COPY_FLAG="--copy-audio"
+if [ "${LX_COPY_AUDIO:-1}" = "0" ]; then
+  COPY_FLAG=""
+fi
+
 echo "[INFO] Preparing combined corpus..."
-"${PYTHON_BIN}" "${ROOT_DIR}/scripts/prepare_luxembourgish_combined.py" --work-dir "${WORK_DIR}"
+"${PYTHON_BIN}" "${ROOT_DIR}/scripts/prepare_luxembourgish_combined.py" --work-dir "${WORK_DIR}" ${COPY_FLAG}
 
 echo "[INFO] Validating combined corpus..."
 "${PYTHON_BIN}" "${ROOT_DIR}/scripts/check_luxembourgish_combined.py" \

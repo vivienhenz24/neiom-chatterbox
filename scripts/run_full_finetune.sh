@@ -278,10 +278,17 @@ fi
 TRAIN_TOKENS_DIR_ABS="$(resolve_path "$TOKENS_ROOT_ABS/$TRAIN_SPLIT")"
 [[ -d "$TRAIN_TOKENS_DIR_ABS" ]] || fail "Train tokens directory missing: $TRAIN_TOKENS_DIR_ABS"
 
+if [[ -z "$(ls -1 "$TRAIN_TOKENS_DIR_ABS"/*.pt 2>/dev/null)" ]]; then
+  fail "No token files were generated in $TRAIN_TOKENS_DIR_ABS. Check the data preparation logs above for missing audio/text warnings."
+fi
+
 VALID_TOKENS_DIR_ABS=""
 if [[ -n "$VALID_SPLIT_DIR" ]]; then
   VALID_TOKENS_DIR_ABS="$(resolve_path "$TOKENS_ROOT_ABS/$VALID_SPLIT")"
   [[ -d "$VALID_TOKENS_DIR_ABS" ]] || fail "Validation tokens directory missing: $VALID_TOKENS_DIR_ABS"
+  if [[ -z "$(ls -1 "$VALID_TOKENS_DIR_ABS"/*.pt 2>/dev/null)" ]]; then
+    fail "No token files were generated in $VALID_TOKENS_DIR_ABS. Check the data preparation logs above for missing audio/text warnings."
+  fi
 fi
 
 if (( KEEP_CONFIG )); then
