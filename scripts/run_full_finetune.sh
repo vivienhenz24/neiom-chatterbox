@@ -66,6 +66,10 @@ OUTPUT_DIR="runs/runpod_luxembourgish"
 CONFIG_PATH="configs/runpod_luxembourgish.yaml"
 MODEL_DIR="models/multilingual"
 MODEL_T3_FILENAME="t3_mtl24ls_v1.safetensors"
+MODEL_T3_FINETUNED_FILENAME="t3_lb_finetuned.safetensors"
+MODEL_T3_FINETUNED_FULL="t3_lb_finetuned_full.pt"
+MODEL_CONFIG_EXPORT="luxembourgish_finetune_config.yaml"
+MODEL_TRAIN_LOG_EXPORT="luxembourgish_train.log"
 TRAIN_SPLIT="train"
 VALID_SPLIT="test"
 MAX_TOKEN_LEN=""
@@ -306,8 +310,11 @@ if source_path != target_ckpt_path and not target_ckpt_path.exists():
     print(f"[WARN] Failed to create {target_ckpt_path.name}; falling back to base checkpoint.", file=sys.stderr)
 PY
 
-MODEL_T3_PATH="$MODEL_DEST_ABS/$MODEL_T3_FILENAME"
-if [[ ! -f "$MODEL_T3_PATH" ]]; then
+if [[ -f "$MODEL_DEST_ABS/$MODEL_T3_FINETUNED_FILENAME" ]]; then
+  MODEL_T3_PATH="$MODEL_DEST_ABS/$MODEL_T3_FINETUNED_FILENAME"
+elif [[ -f "$MODEL_DEST_ABS/$MODEL_T3_FILENAME" ]]; then
+  MODEL_T3_PATH="$MODEL_DEST_ABS/$MODEL_T3_FILENAME"
+else
   MODEL_T3_PATH="$MODEL_DEST_ABS/t3_mtl23ls_v2.safetensors"
 fi
 [[ -f "$MODEL_T3_PATH" ]] || fail "Luxembourgish-ready checkpoint not found under $MODEL_DEST_ABS. Run with --skip-model only after assets exist."
@@ -576,6 +583,89 @@ if (( RUN_TRAIN )); then
     cmd+=("--amp")
   fi
   "${cmd[@]}"
+fi
+
+if (( RUN_TRAIN )); then
+  log "Exporting fine-tuned artifacts for local inference..."
+  "$PYTHON_BIN" - <<PY
+from __future__ import annotations
+
+import json
+import shutil
+import sys
+from pathlib import Path
+
+import torch
+from safetensors.torch import save_file
+
+from chatterbox.models.t3.utils import ensure_text_vocab_capacity
+
+output_dir = Path(r"$OUTPUT_DIR_ABS")
+checkpoint_dir = output_dir / "checkpoints"
+model_dir = Path(r"$MODEL_DEST_ABS")
+tokenizer_path = model_dir / "grapheme_mtl_merged_expanded_v1.json"
+finetuned_safe = model_dir / "$MODEL_T3_FINETUNED_FILENAME"
+finetuned_full = model_dir / "$MODEL_T3_FINETUNED_FULL"
+base_ckpt = model_dir / "$MODEL_T3_FILENAME"
+
+if not checkpoint_dir.exists():
+    print(f"[WARN] Checkpoint directory {checkpoint_dir} missing; skipping export.", file=sys.stderr)
+    sys.exit(0)
+
+best_ckpt = checkpoint_dir / "best.pt"
+
+def _step_key(path: Path) -> int:
+    name = path.stem.split("_")[-1]
+    try:
+        return int(name)
+    except ValueError:
+        return -1
+
+candidates: list[Path] = []
+if best_ckpt.exists():
+    candidates.append(best_ckpt)
+step_ckpts = sorted(checkpoint_dir.glob("step_*.pt"), key=_step_key, reverse=True)
+candidates.extend(step_ckpts)
+
+chosen = next((path for path in candidates if path.exists()), None)
+if chosen is None:
+    print(f"[WARN] No checkpoint files found under {checkpoint_dir}; skipping export.", file=sys.stderr)
+    sys.exit(0)
+
+print(f"[INFO] Using checkpoint {chosen.name} for inference export.")
+
+state = torch.load(chosen, map_location="cpu")
+model_state = state.get("model")
+if model_state is None:
+    raise RuntimeError(f"Checkpoint {chosen} does not contain a 'model' state dict.")
+
+vocab_size = None
+if tokenizer_path.exists():
+    with tokenizer_path.open("r", encoding="utf-8") as fh:
+        tokenizer_payload = json.load(fh)
+    vocab = tokenizer_payload.get("model", {}).get("vocab", {})
+    vocab_size = len(vocab)
+
+model_state = ensure_text_vocab_capacity(model_state, vocab_size)
+
+save_file(model_state, str(finetuned_safe))
+print(f"[INFO] Wrote weights-only safetensors to {finetuned_safe.name}.")
+
+if base_ckpt.resolve() != finetuned_safe.resolve():
+    shutil.copy2(finetuned_safe, base_ckpt)
+    print(f"[INFO] Synced {base_ckpt.name} with fine-tuned weights.")
+
+finetuned_full.parent.mkdir(parents=True, exist_ok=True)
+shutil.copy2(chosen, finetuned_full)
+print(f"[INFO] Copied full training checkpoint to {finetuned_full.name}.")
+PY
+
+  cp "$CONFIG_PATH_ABS" "$MODEL_DEST_ABS/$MODEL_CONFIG_EXPORT"
+  log "Stored fine-tune config at $MODEL_DEST_ABS/$MODEL_CONFIG_EXPORT"
+  if [[ -f "$OUTPUT_DIR_ABS/train.log" ]]; then
+    cp "$OUTPUT_DIR_ABS/train.log" "$MODEL_DEST_ABS/$MODEL_TRAIN_LOG_EXPORT"
+    log "Copied training log to $MODEL_DEST_ABS/$MODEL_TRAIN_LOG_EXPORT"
+  fi
 fi
 
 log "Pipeline complete."

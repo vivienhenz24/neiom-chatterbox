@@ -180,9 +180,20 @@ class ChatterboxMultilingualTTS:
         vocab_size = len(tokenizer.tokenizer.get_vocab())
 
         t3 = T3(T3Config.multilingual(text_tokens_dict_size=vocab_size))
-        t3_ckpt_path = ckpt_dir / "t3_mtl24ls_v1.safetensors"
-        if not t3_ckpt_path.exists():
-            t3_ckpt_path = ckpt_dir / "t3_mtl23ls_v2.safetensors"
+        ckpt_candidates = [
+            ckpt_dir / "t3_lb_finetuned.safetensors",
+            ckpt_dir / "t3_mtl24ls_v1.safetensors",
+            ckpt_dir / "t3_mtl23ls_v2.safetensors",
+        ]
+        for candidate in ckpt_candidates:
+            if candidate.exists():
+                t3_ckpt_path = candidate
+                break
+        else:
+            raise FileNotFoundError(
+                "No multilingual T3 checkpoint found (expected one of: t3_lb_finetuned.safetensors,"
+                " t3_mtl24ls_v1.safetensors, t3_mtl23ls_v2.safetensors)."
+            )
         t3_state = load_safetensors(t3_ckpt_path)
         if "model" in t3_state.keys():
             t3_state = t3_state["model"][0]
