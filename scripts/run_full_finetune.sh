@@ -211,11 +211,27 @@ if (( RUN_DOWNLOAD_DATA )); then
   HF_TOKEN="${HF_TOKEN:-}" PYTHON_BIN="$PYTHON_BIN" bash "$DATA_BUILD_SCRIPT"
 fi
 
-COMBINED_ROOT="$REPO_ROOT/data/luxembourgish_corpus/luxembourgish_combined"
-TRAIN_SPLIT_DIR="$COMBINED_ROOT/$TRAIN_SPLIT"
+DATA_ROOT="$REPO_ROOT/data/luxembourgish_corpus"
+COMBINED_ROOT="$DATA_ROOT/luxembourgish_combined"
+DATASET_BASE="$COMBINED_ROOT"
+if [[ ! -d "$COMBINED_ROOT" ]]; then
+  DATASET_BASE="$DATA_ROOT"
+fi
+
+if [[ ! -d "$DATASET_BASE" ]]; then
+  fail "Combined Luxembourgish dataset not found under $DATA_ROOT. Check the download step above for errors."
+fi
+
+if [[ "$DATASET_BASE" == "$DATA_ROOT" ]]; then
+  log "Using dataset root $DATA_ROOT (no 'luxembourgish_combined' subdirectory present)."
+else
+  log "Using dataset root $COMBINED_ROOT."
+fi
+
+TRAIN_SPLIT_DIR="$DATASET_BASE/$TRAIN_SPLIT"
 VALID_SPLIT_DIR=""
 if [[ "$VALID_SPLIT" != "none" ]]; then
-  VALID_SPLIT_DIR="$COMBINED_ROOT/$VALID_SPLIT"
+  VALID_SPLIT_DIR="$DATASET_BASE/$VALID_SPLIT"
 fi
 
 TOKENIZER_JSON="$MODEL_DEST_ABS/grapheme_mtl_merged_expanded_v1.json"
