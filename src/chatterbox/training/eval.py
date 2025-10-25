@@ -6,13 +6,13 @@ from __future__ import annotations
 import json
 import logging
 import math
+from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Optional, Sequence
 
 import numpy as np
 import torch
-from torch.cuda.amp import autocast
 
 from ..models.s3gen import S3GEN_SR, S3Gen
 from ..models.t3.modules.cond_enc import T3Cond
@@ -91,13 +91,14 @@ def evaluate_losses(
     total = 0.0
     batches = 0
 
-    dtype = torch.float16 if use_amp else None
-    device_type = model_device.type if use_amp else "cpu"
-
     with torch.no_grad():
         for batch in dataloader:
             batch = _move_batch_to_device(batch, model_device)
-            with autocast(device_type=device_type, dtype=dtype, enabled=use_amp):
+            if use_amp:
+                autocast_ctx = torch.autocast(device_type=model_device.type, dtype=torch.float16)
+            else:
+                autocast_ctx = nullcontext()
+            with autocast_ctx:
                 text_loss, speech_loss = model.loss(
                     t3_cond=batch["cond"],
                     text_tokens=batch["text_tokens"],
