@@ -17,6 +17,7 @@ Options:
   --config PATH            Destination of the generated fine-tuning config (default: configs/runpod_luxembourgish.yaml)
   --train-split NAME       Dataset split used for training (default: train)
   --valid-split NAME       Dataset split used for validation (default: test; pass "none" to disable)
+  --target-steps N         Target total optimizer steps (epochs auto-adjusted to reach N)
   --max-token-len N        Optional speech token truncation length during preparation
   --resume PATH            Resume training from checkpoint PATH
   --skip-install           Skip dependency installation
@@ -75,6 +76,7 @@ SKIP_EXISTING=1
 EVAL_ONLY=0
 NO_VALIDATION=0
 FORCE_AMP=0
+TARGET_STEPS=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -94,6 +96,8 @@ while [[ $# -gt 0 ]]; do
       TRAIN_SPLIT="$2"; shift 2 ;;
     --valid-split)
       VALID_SPLIT="$2"; shift 2 ;;
+    --target-steps)
+      TARGET_STEPS="$2"; shift 2 ;;
     --max-token-len)
       MAX_TOKEN_LEN="$2"; shift 2 ;;
     --resume)
@@ -358,6 +362,21 @@ PY
   TOTAL_STEPS="${STATS[3]}"
   MAX_SPEECH_TOKENS="${STATS[4]}"
 
+  if [[ -n "$TARGET_STEPS" ]]; then
+    if ! [[ "$TARGET_STEPS" =~ ^[0-9]+$ ]] || [[ "$TARGET_STEPS" -le 0 ]]; then
+      fail "--target-steps expects a positive integer (got '$TARGET_STEPS')"
+    fi
+    if [[ "$STEPS_PER_EPOCH" -le 0 ]]; then
+      fail "steps_per_epoch reported as zero; cannot satisfy --target-steps"
+    fi
+    EPOCHS=$(( (TARGET_STEPS + STEPS_PER_EPOCH - 1) / STEPS_PER_EPOCH ))
+    if [[ "$EPOCHS" -lt 1 ]]; then
+      EPOCHS=1
+    fi
+    TOTAL_STEPS=$(( EPOCHS * STEPS_PER_EPOCH ))
+    log "Adjusted epochs to $EPOCHS to target approximately $TOTAL_STEPS optimizer steps (requested $TARGET_STEPS)."
+  fi
+
   log "Dataset stats → train: ${TRAIN_SAMPLES} samples, valid: ${VALID_SAMPLES} samples, steps/epoch: ${STEPS_PER_EPOCH}, max speech tokens: ${MAX_SPEECH_TOKENS}"
 
   WARMUP_STEPS=500
@@ -412,7 +431,7 @@ dataset:
 
 model:
   base_checkpoint: "${MODEL_DEST_ABS}/t3_mtl23ls_v2.safetensors"
-  freeze_encoder: true
+  freeze_encoder: false
   freeze_decoder: false
   freeze_modules: []
 
